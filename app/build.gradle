@@ -1,9 +1,16 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+        config {
+            keyAlias 'teleflips'
+            keyPassword 'nashnash'
+            storeFile file('D:/MyDocs/AndroidStudioProjects/TeleFlips/teleflips.jks')
+            storePassword 'nashnash'
+        }
+    }
     compileSdkVersion 20
     buildToolsVersion "20.0.0"
-
     defaultConfig {
         applicationId "com.example.murdochd.teleflips"
         minSdkVersion 14
@@ -15,6 +22,9 @@ android {
         release {
             runProguard false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.config
         }
     }
 }

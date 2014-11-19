@@ -1,9 +1,15 @@
 package com.example.murdochd.teleflips;
 
 import com.example.murdochd.teleflips.util.SystemUiHider;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.games.Games;
+import com.google.android.gms.plus.Plus;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Intent;
+import android.content.IntentSender;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -22,7 +28,7 @@ import android.widget.TextView;
  *
  * @see SystemUiHider
  */
-public class FlipsActivity extends Activity implements SensorEventListener{
+public class FlipsActivity extends Activity implements SensorEventListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener{
     /**
      * Whether or not the system UI should be auto-hidden after
      * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
@@ -56,10 +62,20 @@ public class FlipsActivity extends Activity implements SensorEventListener{
     private float prev;
     private static float total;
     private int score;
+    private GoogleApiClient mGoogleApiClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addApi(Games.API)
+                .addScope(Games.SCOPE_GAMES)
+                .addApi(Plus.API)
+                .addScope(Plus.SCOPE_PLUS_LOGIN)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
 
         //lazy load
         mSensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
@@ -135,6 +151,19 @@ public class FlipsActivity extends Activity implements SensorEventListener{
         // operations to prevent the jarring behavior of controls going away
         // while interacting with the UI.
         findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+        findViewById(R.id.dummy_button).setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                Games.Leaderboards.submitScore(mGoogleApiClient, getResources().getString(R.string.leaderboard_teleflips_world), score);
+
+                Intent lb = Games.Leaderboards.getLeaderboardIntent(mGoogleApiClient, getResources().getString(R.string.leaderboard_teleflips_world));
+                startActivityForResult(lb, 0);
+
+                total = 0f;
+                updateScore();
+                return true;
+            }
+        });
     }
 
     @Override
@@ -180,6 +209,18 @@ public class FlipsActivity extends Activity implements SensorEventListener{
         mHideHandler.postDelayed(mHideRunnable, delayMillis);
     }
 
+
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+    }
+
+    protected void onStop() {
+        super.onStop();
+        if (mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
+        }
+    }
     protected void onResume() {
         super.onResume();
         mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_FASTEST);
@@ -199,6 +240,12 @@ public class FlipsActivity extends Activity implements SensorEventListener{
             //get Text View
             TextView scoreHolder = (TextView)findViewById(R.id.fullscreen_content);
             scoreHolder.setText(Integer.toString(score));
+        }
+        TextView tv = (TextView) findViewById(R.id.instructions);
+        if(score > 0 ){
+            tv.setAlpha(0f);
+        }else{
+            tv.setAlpha(1f);
         }
     }
 
@@ -222,4 +269,32 @@ public class FlipsActivity extends Activity implements SensorEventListener{
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
     }
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        int i = 0;
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    boolean mIntentInProgress = false;
+
+    @Override
+    public void onConnectionFailed(ConnectionResult result) {
+        if (!mIntentInProgress && result.hasResolution()) {
+            try {
+                mIntentInProgress = true;
+                startIntentSenderForResult(result.getResolution().getIntentSender(),
+                        0, null, 0, 0, 0);
+                mGoogleApiClient.connect();
+            } catch (IntentSender.SendIntentException e) {
+                // The intent was canceled before it was sent.  Return to the default
+                // state and attempt to connect to get an updated ConnectionResult.
+                mIntentInProgress = false;
+                mGoogleApiClient.connect();
+            }
+        }    }
 }
